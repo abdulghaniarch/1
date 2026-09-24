@@ -202,8 +202,8 @@
   <div class="terminal-body">
     <!-- Single Lookup Tab -->
     <div id="single" class="tab-content active">
-      <div class="command-line">$ nuorder color-lookup <span>--compound-protected --max-2-colors</span></div>
-      <input type="text" id="searchInput" class="search-box" placeholder="Try: 'TESTA DI MORO / GOLD' or 'RETE ROSA 018/MIGN. NAP. DUSTY || DUSTY PINK 018'..." oninput="handleSearch()">
+      <div class="command-line">$ nuorder color-lookup <span>--expanded-abbrev --max-2-colors</span></div>
+      <input type="text" id="searchInput" class="search-box" placeholder="Try: 'blac', 'wht', 'TESTA DI MORO / GOLD'..." oninput="handleSearch()">
       
       <div class="results-card" id="resultCard">
         <div class="field-row">
@@ -227,15 +227,11 @@
     <div id="batch" class="tab-content">
       <div class="command-line">$ nuorder color-lookup <span>--batch &lt; colors_input.txt</span></div>
       <textarea id="batchInput" placeholder="Paste raw supplier strings (one per line)...
+blac
+wht
 TESTA DI MORO / GOLD
-RETE ROSA 018/MIGN. NAP. DUSTY || DUSTY PINK 018 || DUSTY PINK (INGROP 136)
-RETE NERO/MIGNON NAPPA NERO || DUSTY PINK 018 || NERO
-NERO H140CM || NERO H140CM || ARGENTO FONDO BIANCO
-MAROON 393 || MAROON 393 || ARGENTO FONDO BIANCO
-CUOIO TEMP || CUOIO (TEMP)
-T.MORO || BURNT SIENNA || COLLEGE RED
-FLAME RED || CAMOSCIO FLAME RED || FLAME RED
-CARM 102 / M WITH LIN"></textarea>
+RETE ROSA 018/MIGN. NAP. DUSTY || DUSTY PINK 018
+NERO H140CM || NERO H140CM || ARGENTO FONDO BIANCO"></textarea>
       <div class="actions">
         <button class="btn btn-primary" onclick="runBatch()">Process Batch</button>
         <button class="btn" onclick="copyBatchTSV()">Copy All (TSV)</button>
@@ -279,8 +275,10 @@ CARM 102 / M WITH LIN"></textarea>
     'VRV', 'NEW', 'NW', 'LIN', 'SF', 'TI', 'DS', 'BOT', 'WITH', 'S', 'M', 'L'
   ]);
 
-  // Color Translation & Abbreviation Map
+  // Color Translation & Abbreviation Map (Includes BLAC -> Black and WHT -> White)
   const COLOR_MAP = {
+    'BLAC': 'Black',
+    'WHT': 'White',
     'ROSA': 'Pink',
     'NERO': 'Black',
     'BLK': 'Black',
@@ -289,6 +287,7 @@ CARM 102 / M WITH LIN"></textarea>
     'MAROON': 'Maroon',
     'BLU': 'Blue',
     'GRY': 'Grey',
+    'GRAY': 'Grey',
     'GRN': 'Green',
     'NV': 'Navy',
     'DK': 'Dark',
@@ -357,7 +356,7 @@ CARM 102 / M WITH LIN"></textarea>
       for (let token of tokens) {
         let upper = token.toUpperCase();
 
-        // Strip digits, numbers, years, and height codes (e.g. 018, 136, 2011, H140CM)
+        // Strip digits, numbers, years, and height codes
         if (/^\d+$/.test(token) || /\d/.test(token)) continue;
         // Strip single letter tokens
         if (token.length === 1 && /[A-Za-z]/.test(token)) continue;
