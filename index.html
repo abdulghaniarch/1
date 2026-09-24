@@ -202,8 +202,8 @@
   <div class="terminal-body">
     <!-- Single Lookup Tab -->
     <div id="single" class="tab-content active">
-      <div class="command-line">$ nuorder color-lookup <span>--max-2-colors --smart-clean</span></div>
-      <input type="text" id="searchInput" class="search-box" placeholder="Try: 'NERO H140CM || NERO H140CM || ARGENTO FONDO BIANCO'..." oninput="handleSearch()">
+      <div class="command-line">$ nuorder color-lookup <span>--compound-protected --max-2-colors</span></div>
+      <input type="text" id="searchInput" class="search-box" placeholder="Try: 'TESTA DI MORO / GOLD' or 'RETE ROSA 018/MIGN. NAP. DUSTY || DUSTY PINK 018'..." oninput="handleSearch()">
       
       <div class="results-card" id="resultCard">
         <div class="field-row">
@@ -227,6 +227,7 @@
     <div id="batch" class="tab-content">
       <div class="command-line">$ nuorder color-lookup <span>--batch &lt; colors_input.txt</span></div>
       <textarea id="batchInput" placeholder="Paste raw supplier strings (one per line)...
+TESTA DI MORO / GOLD
 RETE ROSA 018/MIGN. NAP. DUSTY || DUSTY PINK 018 || DUSTY PINK (INGROP 136)
 RETE NERO/MIGNON NAPPA NERO || DUSTY PINK 018 || NERO
 NERO H140CM || NERO H140CM || ARGENTO FONDO BIANCO
@@ -304,8 +305,10 @@ CARM 102 / M WITH LIN"></textarea>
 
   // Family Lookups
   const FAMILY_RULES = [
+    { match: 'testa di moro', family: 'Brown' },
     { match: 'dusty pink', family: 'Pink' },
     { match: 'flame red', family: 'Red' },
+    { match: 'burnt sienna', family: 'Brown' },
     { match: 'maroon', family: 'Red' },
     { match: 'carmine', family: 'Red' },
     { match: 'oxblood', family: 'Red' },
@@ -325,6 +328,7 @@ CARM 102 / M WITH LIN"></textarea>
     { match: 'black', family: 'Black' },
     { match: 'butter', family: 'Yellow' },
     { match: 'yellow', family: 'Yellow' },
+    { match: 'gold', family: 'Yellow' },
     { match: 'white', family: 'White' },
     { match: 'silver', family: 'Silver' },
     { match: 'green', family: 'Green' }
@@ -370,36 +374,38 @@ CARM 102 / M WITH LIN"></textarea>
       return validTokens.join(' ');
     }).filter(Boolean);
 
-    // 2. Determine final facing color name
-    let finalFacing = '';
     let fullText = cleanSegments.join(' ');
 
-    // Multi-word phrase priority
-    if (/dusty\s+pink/i.test(fullText)) {
-      finalFacing = 'Dusty Pink';
-    } else if (cleanSegments.length > 0) {
-      let uniqueColors = [];
-      let seen = new Set();
-      
-      cleanSegments.forEach(seg => {
-        seg.split(' ').forEach(word => {
-          let u = word.toUpperCase();
-          if (!seen.has(u)) {
-            seen.add(u);
-            uniqueColors.push(word);
-          }
-        });
-      });
+    // 2. Preserve recognized compound phrases as single color units
+    let recognizedPhrases = [
+      'TESTA DI MORO', 'DUSTY PINK', 'BURNT SIENNA', 'FLAME RED', 'NAVY BLUE', 'OFF WHITE'
+    ];
 
-      // STRICT RULE: Max 2 core colors allowed
-      if (uniqueColors.length > 2) {
-        uniqueColors = uniqueColors.slice(0, 2);
+    let extractedColors = [];
+    let upperText = fullText.toUpperCase();
+
+    // Match compound phrases first
+    recognizedPhrases.forEach(phrase => {
+      if (upperText.includes(phrase) && !extractedColors.includes(phrase)) {
+        extractedColors.push(phrase);
+        upperText = upperText.replace(new RegExp(phrase, 'g'), '');
       }
+    });
 
-      finalFacing = uniqueColors.join(' ');
+    // Extract remaining individual color words
+    let remainingWords = upperText.split(/\s+/).filter(Boolean);
+    remainingWords.forEach(word => {
+      if (!extractedColors.includes(word)) {
+        extractedColors.push(word);
+      }
+    });
+
+    // Enforce MAX 2 CORE COLOR UNITS
+    if (extractedColors.length > 2) {
+      extractedColors = extractedColors.slice(0, 2);
     }
 
-    finalFacing = toTitleCase(finalFacing);
+    let finalFacing = toTitleCase(extractedColors.join(' '));
 
     // Enforce 30-character hard limit safely by dropping trailing words
     if (finalFacing.length > 30) {
