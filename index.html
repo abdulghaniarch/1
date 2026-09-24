@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NuORDER — Color Data Cleaning Engine (5-Stage Pipeline)</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-dim: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .terminal {
+      width: 100%;
+      max-width: 900px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      overflow: hidden;
+    }
+
+    .terminal-header {
+      background: #21262d;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .window-dots {
+      display: flex;
+      gap: 8px;
+      margin-right: 16px;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot.red { background: var(--red); }
+    .dot.yellow { background: var(--yellow); }
+    .dot.green { background: var(--green); }
+
+    .title { font-size: 0.85rem; color: var(--text-dim); }
+
+    .tab-bar {
+      display: flex;
+      background: #0d1117;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      padding: 10px 20px;
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-family: inherit;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: var(--card-bg);
+    }
+
+    .terminal-body { padding: 20px; }
+    .command-line {
+      color: var(--green);
+      font-size: 0.9rem;
+      margin-bottom: 15px;
+    }
+    .command-line span { color: var(--text-dim); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .search-box {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+      outline: none;
+    }
+    .search-box:focus { border-color: var(--accent); }
+
+    .results-card {
+      margin-top: 15px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 15px;
+    }
+    .field-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .field-label { color: var(--text-dim); }
+    .field-val { color: var(--accent); font-weight: bold; }
+
+    .actions { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+    .btn {
+      padding: 8px 14px;
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn:hover { background: #30363d; }
+    .btn-primary { background: #238636; border-color: #2e9d40; }
+    .btn-primary:hover { background: #2ea043; }
+
+    textarea {
+      width: 100%;
+      height: 140px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 10px;
+      font-family: inherit;
+      resize: vertical;
+    }
+    table {
+      width: 100%;
+      margin-top: 15px;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th { background: #21262d; color: var(--text-dim); }
+
+    .key-hints {
+      margin-top: 15px;
+      color: var(--text-dim);
+      font-size: 0.75rem;
+      text-align: center;
+    }
+    kbd {
+      background: #21262d;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+    .char-count {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      float: right;
+    }
+  </style>
+</head>
+<body>
+
+<div class="terminal">
+  <div class="terminal-header">
+    <div class="window-dots">
+      <div class="dot red"></div>
+      <div class="dot yellow"></div>
+      <div class="dot green"></div>
+    </div>
+    <div class="title">nuorder — color-lookup & rule-cleaning engine</div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('single', event)">Single Lookup</button>
+    <button class="tab-btn" onclick="switchTab('batch', event)">Batch Mode</button>
+    <button class="tab-btn" onclick="switchTab('sources', event)">Sources</button>
+  </div>
+
+  <div class="terminal-body">
+    <!-- Single Lookup -->
+    <div id="single" class="tab-content active">
+      <div class="command-line">$ nuorder color-lookup <span>--strict-clean</span></div>
+      <input type="text" id="searchInput" class="search-box" placeholder="Try: 'Dark Cognac || Biscotto' or 'L.CAC/BUTT'..." oninput="handleSearch()">
+      
+      <div class="results-card" id="resultCard">
+        <div class="field-row">
+          <span class="field-label">customer_facing_color</span>
+          <span class="field-val" id="resFacing">—</span>
+        </div>
+        <div class="field-row">
+          <span class="field-label">color_family</span>
+          <span class="field-val" id="resFamily">—</span>
+        </div>
+        <div class="char-count" id="charCount">0/30 chars</div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="copyResult('tab')">Copy Both (Tab Separated)</button>
+          <button class="btn" onclick="copyResult('facing')">Copy Name</button>
+          <button class="btn" onclick="copyResult('family')">Copy Family</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Batch Mode -->
+    <div id="batch" class="tab-content">
+      <div class="command-line">$ nuorder color-lookup <span>--batch &lt; colors.txt</span></div>
+      <textarea id="batchInput" placeholder="Paste raw color entries (one per line)...
+Dark Cognac || Biscotto
+PIQUE PINK / GREEN / PINK GRADIENT STRIPE
+PINK / PINK / VRV
+WHITE/WHITE/VRV
+BLACK/BLACK/VRV
+new camel - 250
+PANAMA/BUT
+L.CAC/BUTT
+BLK 01 / S - #2
+CARM 102 / M WITH LIN
+NAVY-BLUE (A)"></textarea>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="runBatch()">Process Batch</button>
+        <button class="btn" onclick="copyBatchTSV()">Copy All TSV</button>
+      </div>
+      <table id="batchTable" style="display:none;">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Raw Input</th>
+            <th>Customer Facing Color</th>
+            <th>Color Family</th>
+          </tr>
+        </thead>
+        <tbody id="batchBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Sources -->
+    <div id="sources" class="tab-content">
+      <div class="command-line">$ nuorder sources <span>--list</span></div>
+      <input type="text" id="sourceUrl" class="search-box" placeholder="Published Google Sheet CSV URL...">
+      <div class="actions" style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="alert('Rule cleaning engine active!')">Add CSV Source</button>
+      </div>
+      <p style="margin-top: 15px; font-size: 0.8rem; color: var(--text-dim);">
+        Needs <b>COLOR</b> and <b>Color Family</b> columns · Google Sheets: File → Share → Publish to web → CSV
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="key-hints">
+  <kbd>Tab</kbd> complete · <kbd>⏎</kbd> copy output · <kbd>Esc</kbd> clear input
+</div>
+
+<script>
+  // Exact Abbreviation Map
+  const ABBREVIATIONS = {
+    'BUT': 'Butter',
+    'BUTT': 'Butter',
+    'DK': 'Dark',
+    'CARM': 'Carmine',
+    'BLK': 'Black',
+    'BLU': 'Blue',
+    'GRY': 'Grey',
+    'GRN': 'Green',
+    'NV': 'Navy',
+    'NERO': 'Black',
+    'CAC': 'Cac'
+  };
+
+  // Garbage / Supplier / Noise Codes
+  const NOISE_WORDS = new Set([
+    'VRV', 'NEW', 'NW', 'LIN', 'SF', 'TI', 'DS', 'BOT', 'WITH'
+  ]);
+
+  // Off White Grouping
+  const OFF_WHITE_TERMS = new Set([
+    'ivory', 'cream', 'off white', 'offwhite', 'off-white', 'bone', 'ecru', 'champagne', 'vanilla'
+  ]);
+
+  // Family Lookups
+  const FAMILY_RULES = [
+    { match: 'carmine', family: 'Red' },
+    { match: 'cognac', family: 'Brown' },
+    { match: 'red', family: 'Red' },
+    { match: 'navy', family: 'Blue' },
+    { match: 'blue', family: 'Blue' },
+    { match: 'charcoal', family: 'Grey' },
+    { match: 'grey', family: 'Grey' },
+    { match: 'gray', family: 'Grey' },
+    { match: 'tan', family: 'Tan' },
+    { match: 'camel', family: 'Brown' },
+    { match: 'brown', family: 'Brown' },
+    { match: 'black', family: 'Black' },
+    { match: 'butter', family: 'Yellow' },
+    { match: 'yellow', family: 'Yellow' },
+    { match: 'white', family: 'White' },
+    { match: 'pink', family: 'Pink' },
+    { match: 'green', family: 'Green' }
+  ];
+
+  function toTitleCase(str) {
+    return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function processColorRules(rawInput) {
+    if (!rawInput || !rawInput.trim()) {
+      return { facing: '—', family: '—', charLen: 0 };
+    }
+
+    let text = rawInput;
+
+    // 1. Fixed replacements: 'Nude' -> 'Tan', '&' -> 'and'
+    text = text.replace(/\bNude\b/gi, 'Tan').replace(/&/g, 'and');
+
+    // 2. STAGE 1 FIX: Strip ALL punctuation, symbols, AND PIPES (| and ||)
+    text = text.replace(/[-/\\,.#()"'`_|]/g, ' ');
+
+    // 3. Split into tokens
+    let rawTokens = text.split(/\s+/).filter(Boolean);
+    let cleanedTokens = [];
+    let seenTokens = new Set();
+
+    for (let token of rawTokens) {
+      let upperToken = token.toUpperCase();
+
+      // Rule: NO NUMBERS OR DIGITS
+      if (/^\d+$/.test(token) || /\d/.test(token)) continue;
+
+      // Rule: NO SINGLE-LETTER TOKENS
+      if (token.length === 1 && /[A-Za-z]/.test(token)) continue;
+
+      // Rule: REMOVE NOISE & CODES
+      if (NOISE_WORDS.has(upperToken)) continue;
+
+      // Handle dot prefixes like 'L.CAC' -> 'CAC'
+      if (upperToken.includes('.')) {
+        let parts = upperToken.split('.').filter(Boolean);
+        let validParts = parts.filter(p => p.length > 1);
+        if (validParts.length > 0) upperToken = validParts[0];
+      }
+
+      // Rule: ABBREVIATIONS
+      if (ABBREVIATIONS[upperToken]) {
+        token = ABBREVIATIONS[upperToken];
+        upperToken = token.toUpperCase();
+      }
+
+      // Rule: STRICT DEDUPLICATION
+      if (seenTokens.has(upperToken)) continue;
+      seenTokens.add(upperToken);
+
+      cleanedTokens.push(token);
+    }
+
+    let facingString = toTitleCase(cleanedTokens.join(' '));
+
+    // Rule: STRICT 30-CHARACTER WORD LIMIT
+    while (facingString.length > 30 && cleanedTokens.length > 0) {
+      cleanedTokens.pop();
+      facingString = toTitleCase(cleanedTokens.join(' '));
+    }
+
+    if (!facingString) facingString = '—';
+
+    // 4. Determine Color Family
+    let familyString = 'Other';
+    let lowerFacing = facingString.toLowerCase();
+
+    // Check Off White Rules
+    let isOffWhite = Array.from(OFF_WHITE_TERMS).some(term => lowerFacing.includes(term));
+    if (isOffWhite) {
+      familyString = 'Off White';
+    } else {
+      for (let rule of FAMILY_RULES) {
+        if (lowerFacing.includes(rule.match)) {
+          familyString = rule.family;
+          break;
+        }
+      }
+    }
+
+    return {
+      facing: facingString,
+      family: familyString,
+      charLen: facingString === '—' ? 0 : facingString.length
+    };
+  }
+
+  function handleSearch() {
+    const val = document.getElementById('searchInput').value;
+    const res = processColorRules(val);
+
+    document.getElementById('resFacing').innerText = res.facing;
+    document.getElementById('resFamily').innerText = res.family;
+    document.getElementById('charCount').innerText = `${res.charLen}/30 chars`;
+  }
+
+  function runBatch() {
+    const rawLines = document.getElementById('batchInput').value.split('\n');
+    const tbody = document.getElementById('batchBody');
+    tbody.innerHTML = '';
+
+    let count = 1;
+    rawLines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      const res = processColorRules(trimmed);
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${count++}</td>
+        <td>${trimmed}</td>
+        <td>${res.facing}</td>
+        <td>${res.family}</td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    document.getElementById('batchTable').style.display = 'table';
+  }
+
+  function copyResult(type) {
+    const facing = document.getElementById('resFacing').innerText;
+    const family = document.getElementById('resFamily').innerText;
+
+    if (facing === '—') return;
+
+    let textToCopy = '';
+    if (type === 'tab') textToCopy = `${facing}\t${family}`;
+    else if (type === 'facing') textToCopy = facing;
+    else if (type === 'family') textToCopy = family;
+
+    navigator.clipboard.writeText(textToCopy);
+    alert('Copied to clipboard!');
+  }
+
+  function copyBatchTSV() {
+    const rows = document.querySelectorAll('#batchBody tr');
+    let tsv = 'Raw Input\tCustomer Facing Color\tColor Family\n';
+
+    rows.forEach(r => {
+      const cols = r.querySelectorAll('td');
+      tsv += `${cols[1].innerText}\t${cols[2].innerText}\t${cols[3].innerText}\n`;
+    });
+
+    navigator.clipboard.writeText(tsv);
+    alert('Copied Batch TSV to clipboard!');
+  }
+
+  function switchTab(tabId, evt) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    
+    evt.target.classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+  }
+</script>
+</body>
+</html>
